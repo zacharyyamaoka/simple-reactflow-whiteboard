@@ -45,10 +45,12 @@ pnpm test     # Playwright, against a real dev server
 ## Testing
 
 `window.__WB__ = { tool, nodes, edges }` is published on every render (see
-`src/whiteboard/debug.ts`). **This is a test hook for `tests/whiteboard.spec.ts`,
-not a public API** — it exposes React Flow's live node/edge arrays so the
-acceptance suite can assert on the model directly rather than scrape the DOM.
-Don't build against it from outside the test suite.
+`src/whiteboard/debug.ts`), **dev-only** — gated on `import.meta.env.DEV`, so
+it never ships in `pnpm build`'s output. **This is a test hook for
+`tests/whiteboard.spec.ts`, not a public API** — it exposes React Flow's live
+node/edge arrays so the acceptance suite (which runs against the dev server)
+can assert on the model directly rather than scrape the DOM. Don't build
+against it from outside the test suite.
 
 ## Prior art
 

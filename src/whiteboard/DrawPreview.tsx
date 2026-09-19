@@ -16,6 +16,7 @@ export default function DrawPreview({ gesture }: { gesture: DrawingGesture | nul
     return (
       <ViewportPortal>
         <div
+          data-testid="draw-preview"
           style={{
             position: 'absolute',
             left: rect.x,
@@ -42,6 +43,7 @@ export default function DrawPreview({ gesture }: { gesture: DrawingGesture | nul
   return (
     <ViewportPortal>
       <svg
+        data-testid="draw-preview"
         style={{ position: 'absolute', left, top, overflow: 'visible', pointerEvents: 'none' }}
         width={width}
         height={height}

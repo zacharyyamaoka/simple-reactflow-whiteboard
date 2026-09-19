@@ -51,7 +51,16 @@ export function normaliseRect(a: XYPosition, b: XYPosition): Rect {
 
 export const DEFAULT_RECT_SIZE = { width: 160, height: 100 }
 
-/** Below this drag distance (flow units) a gesture reads as a click, not a drag. */
+/**
+ * Below this drag distance (screen pixels) a gesture reads as a click, not a
+ * drag. A screen-pixel unit, not flow units: this is a statement about how
+ * far the user's hand actually moved, and flow units stretch with zoom (at
+ * zoom 0.5 a flow unit is 2 screen px; at zoom 2 it's half a screen px), so
+ * comparing raw flow-space distance against a fixed number would make the
+ * same physical twitch register as a click at one zoom and a drag at
+ * another. Callers convert their flow-space distance to screen pixels
+ * (multiply by the current zoom) before comparing against this.
+ */
 export const DRAG_COMMIT_THRESHOLD = 4
 
 export function createShapeNode(rect: Rect, id = makeId('shape')): ShapeNode {

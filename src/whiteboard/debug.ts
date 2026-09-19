@@ -13,6 +13,8 @@ declare global {
   }
 }
 
+/** Dev-only: the acceptance suite runs against the dev server, never the built bundle. */
 export function publishDebugState(state: WbDebugState) {
+  if (!import.meta.env.DEV) return
   window.__WB__ = state
 }

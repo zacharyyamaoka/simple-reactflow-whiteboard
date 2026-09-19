@@ -13,7 +13,12 @@ next to them.
   `/home/bam/pyblocks/src/whiteboard/model.ts:377-396` (`createAnchor`).
   Trimmed: the donor anchor carries a full `ShapeStyle` (stroke/fill/opacity
   for a style system this board doesn't have); this one only needs
-  `width`/`height`/`selectable`.
+  `width`/`height`/`selectable`. **Deliberate divergence, not a trim:** the
+  donor sets `draggable: false` (`model.ts:383`); this port leaves it
+  draggable, because here a free endpoint's only way to move is being
+  dragged directly (see `AnchorNode.tsx`'s hit-pad) — the donor's anchors
+  are instead repositioned by the border-snap system, which this board does
+  not have.
 - **`cleanupUnusedAnchors`** — ports
   `/home/bam/pyblocks/src/whiteboard/model.ts:944-947` verbatim in approach
   (build the set of node ids any edge still references, drop the anchors not
@@ -40,10 +45,11 @@ next to them.
 
 - **Gesture shape (`start`/`current` in flow space) and the
   screen→flow→commit flow** — ports the shape of
-  `/home/bam/pyblocks/src/App.tsx` `onToolPointerDown`/`onToolPointerMove`
-  (~3051-3073) and `createConnector` (~2985-3017): track a gesture with
-  `screenToFlowPosition`, resolve each endpoint independently, create an
-  anchor only for the end that isn't a snap/bind hit.
+  `/home/bam/pyblocks/src/App.tsx` `onToolPointerDown` (3051-3073),
+  `onToolPointerMove` (3075-3091), and `createConnector` (~2985-3017): track
+  a gesture with `screenToFlowPosition`, resolve each endpoint
+  independently, create an anchor only for the end that isn't a snap/bind
+  hit.
 - **`shapeAt` (point-in-shape binding test)** — ours, ad hoc, and
   deliberately NOT a port. The donor's binding
   (`/home/bam/pyblocks/src/App.tsx` `findSnap`, ~2404-2410, calling
@@ -104,19 +110,27 @@ next to them.
 
 ## `src/whiteboard/ConnectorEdge.tsx`
 
-- **Straight path + separate wide invisible hit-path** — the two-path
-  technique (visible stroke + a much wider transparent one underneath as
-  the click target) is exactly what the brief specifies; it is also how
-  React Flow's own `<BaseEdge>` implements `interactionWidth`
-  (`dist/esm/index.mjs`, `function BaseEdge`, using `strokeOpacity: 0` +
-  `strokeWidth: interactionWidth`, default `20`). This file hand-rolls the
-  same technique at `strokeWidth={12}` per the brief instead of delegating
-  to `<BaseEdge>`, so it's listed as ours/ad hoc rather than a port of a
-  named algorithm — the underlying trick (an SVG element with `pointer-events:
-  visibleStroke` hit-tests on stroke geometry regardless of color/opacity)
-  is standard SVG behavior, not something either codebase invented.
+- **Straight path + separate wide invisible hit-path** — delegates to React
+  Flow's own `<BaseEdge interactionWidth={12}>`, which implements exactly
+  this two-path technique internally (`dist/esm/index.mjs`, `function
+  BaseEdge`: a visible stroke plus a much wider `strokeOpacity: 0` path
+  underneath as the click target, default `interactionWidth` 20). Not a
+  hand-rolled reimplementation — the underlying trick (an SVG element with
+  `pointer-events: visibleStroke` hit-tests on stroke geometry regardless of
+  color/opacity) is standard SVG behavior, not something either codebase
+  invented, and this file doesn't reproduce it: it just calls `<BaseEdge>`.
 - **Arrowhead marker** — ours, ad hoc (a plain SVG `<marker>` with a
   triangle path); not a port.
+
+## `src/whiteboard/geometry.ts`
+
+- **`clipRayToRectBorder`** — ours, derived from scratch (the standard
+  parametric ray/AABB clip: scale the direction vector until the first slab
+  is crossed). See the file's own `PROVENANCE:` block for the full
+  reasoning, including why React Flow's "floating edges" example and
+  pyblocks' `findSnap`/`nearestBorderSnap` are both explicitly not analogues
+  (the latter answers "where did the user aim", not "where does this line
+  exit").
 
 ## `/home/bam/openflowkit-reference/` — evaluated and rejected
 

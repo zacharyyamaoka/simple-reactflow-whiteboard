@@ -28,8 +28,10 @@ export function clipRayToRectBorder(
 ): XYPosition {
   const dx = toward.x - centre.x
   const dy = toward.y - centre.y
-  // Degenerate box or a zero-length ray: there is no border to land on.
-  if (halfWidth <= 0 || halfHeight <= 0) return centre
+  // Degenerate box or a zero-length ray: there is no border to land on. A
+  // positive-number test, not `<= 0` — `NaN <= 0` is false, so a NaN extent
+  // would otherwise fall through into `d="M NaN,NaN…"` instead of here.
+  if (!(halfWidth > 0) || !(halfHeight > 0)) return centre
   if (dx === 0 && dy === 0) return centre
 
   // How far the direction vector scales before crossing each slab. The
@@ -38,9 +40,13 @@ export function clipRayToRectBorder(
   const scaleToHorizontalEdge = dy === 0 ? Number.POSITIVE_INFINITY : halfHeight / Math.abs(dy)
   const scale = Math.min(scaleToVerticalEdge, scaleToHorizontalEdge)
 
-  // The ray already ends inside the box (overlapping shapes): clipping would
-  // push the endpoint past its target and invert the line, so leave it alone.
-  if (scale >= 1) return toward
+  // The ray never leaves the box (its target is inside, or on, the same
+  // rectangle): there is no border to clip to. `drawing.ts`'s resolveEndpoint
+  // only binds an endpoint to a shape when the *other* end lies outside it,
+  // which guarantees scale < 1 here — so this should be unreachable. Kept as
+  // an honest guard: returning `toward` would collapse this endpoint onto
+  // the far one, so fall back to the centre instead.
+  if (scale >= 1) return centre
 
   return { x: centre.x + dx * scale, y: centre.y + dy * scale }
 }

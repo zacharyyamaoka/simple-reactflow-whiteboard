@@ -88,6 +88,8 @@ padding:4px 7px;background:#fff}
 .decision li{margin:10px 0}
 .decision b{display:block}
 .missing{color:var(--warn);font-family:var(--mono);font-size:.85rem}
+details.fallback{margin:6px 0 0}
+details.fallback summary{cursor:pointer;color:var(--muted);font-size:.88rem;padding:4px 2px}
 footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:.86rem}
 a{color:var(--accent)}
 """
@@ -111,6 +113,16 @@ def build(media: pathlib.Path, out: pathlib.Path, facts: dict) -> pathlib.Path:
     elif gif.exists():
         hero = f'<div class="hero"><img src="{data_uri(gif)}" alt="whiteboard demo"></div>'
 
+    # A GIF fallback for anywhere the inline <video> refuses to play, tucked
+    # into a <details> so it costs nothing visually when the video works.
+    fallback = media / "hero-fallback.gif"
+    if mp4.exists() and fallback.exists():
+        hero += (
+            '<details class="fallback"><summary>Video not playing? Open the GIF fallback</summary>'
+            f'<div class="hero"><img src="{data_uri(fallback)}" alt="whiteboard demo, GIF"></div>'
+            "</details>"
+        )
+
     stock_rows = "".join(
         f'<tr class="{"stock" if row.get("unchanged") else ""}">'
         f'<td>{row["element"]}</td><td>{row["today"]}</td>'
@@ -125,6 +137,7 @@ def build(media: pathlib.Path, out: pathlib.Path, facts: dict) -> pathlib.Path:
         for row in facts["provenance"]
     )
 
+    facts_audit = facts["audit"]
     decisions = "".join(
         f'<li><b>{item["q"]}</b>{item["a"]}</li>' for item in facts["decisions"]
     )
@@ -174,6 +187,11 @@ lines on <span class="kbd">L</span>, arrows on <span class="kbd">A</span> — an
 <p class="lede">Ten assertions, written and committed <i>before</i> the implementation and off-limits
 to it. Driven against the real dev server in a real browser — not a component mock.</p>
 <pre>{facts['tests_output']}</pre>
+
+<h2>What an independent audit found</h2>
+<p class="lede">A different model, read-only by construction, was pointed at the finished code with
+instructions to attack it — including two decisions I was already suspicious of.</p>
+{facts_audit}
 
 <h2>Algorithm provenance</h2>
 <p class="lede">Every file carrying real logic cites a source that exists on disk.</p>
