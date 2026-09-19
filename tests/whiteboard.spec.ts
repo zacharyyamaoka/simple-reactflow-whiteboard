@@ -211,3 +211,76 @@ test('with the select tool a rectangle can be dragged', async ({ page }) => {
   expect(moved.position.x).toBeCloseTo(400, -1)
   expect(moved.position.y).toBeCloseTo(300, -1)
 })
+
+/**
+ * Second wave — two things the first nine could not see, written after
+ * watching the real app and before the fix that makes them pass.
+ */
+
+/** The `d` of a connector's visible path, as {start, end} in flow coords. */
+async function edgeEndpoints(page: Page, edgeId: string) {
+  const d = await page
+    .locator(`.react-flow__edge[data-id="${edgeId}"] path.react-flow__edge-path`)
+    .getAttribute('d')
+  const numbers = (d ?? '').match(/-?\d+(\.\d+)?/g)?.map(Number) ?? []
+  if (numbers.length < 4) throw new Error(`unreadable edge path: ${d}`)
+  return {
+    start: { x: numbers[0], y: numbers[1] },
+    end: { x: numbers[numbers.length - 2], y: numbers[numbers.length - 1] },
+  }
+}
+
+test('deleting a bound shape sweeps the connector and its far anchor', async ({ page }) => {
+  await page.keyboard.press('r')
+  await drag(page, { x: 300, y: 200 }, { x: 500, y: 340 })
+  await page.keyboard.press('a')
+  await drag(page, { x: 400, y: 270 }, { x: 850, y: 430 })
+
+  const before = await model(page)
+  expect(before.edges).toHaveLength(1)
+  expect(before.nodes).toHaveLength(2) // the shape + one free-end anchor
+
+  const o = await paneOrigin(page)
+  await page.mouse.click(o.x + 320, o.y + 330) // inside the rect, off the arrow
+  await page.waitForTimeout(60)
+  await page.keyboard.press('Delete')
+  await page.waitForTimeout(120)
+
+  const after = await model(page)
+  // React Flow cascade-deletes the connector with its source node; the anchor
+  // that connector owned is then an orphan and must go too.
+  expect(after.edges).toHaveLength(0)
+  expect(after.nodes).toHaveLength(0)
+})
+
+test('a bound connector stops at the shape boundary, not its centre', async ({ page }) => {
+  await page.keyboard.press('r')
+  await drag(page, { x: 300, y: 200 }, { x: 500, y: 340 })
+  await page.keyboard.press('a')
+  await drag(page, { x: 400, y: 270 }, { x: 850, y: 430 })
+
+  const m = await model(page)
+  const { start } = await edgeEndpoints(page, m.edges[0].id)
+
+  // Drawn from the rect's centre (400,270) toward (850,430), the line leaves
+  // through the right edge at x=500. Anything materially left of that is the
+  // arrow overdrawing the shape it points out of.
+  expect(start.x).toBeGreaterThan(497)
+  expect(start.x).toBeLessThan(510)
+  expect(start.y).toBeGreaterThan(295)
+  expect(start.y).toBeLessThan(316)
+})
+
+test('a free connector still reaches its exact drawn endpoints', async ({ page }) => {
+  await page.keyboard.press('a')
+  await drag(page, { x: 400, y: 300 }, { x: 800, y: 500 })
+
+  const m = await model(page)
+  const { start, end } = await edgeEndpoints(page, m.edges[0].id)
+  // Clipping must apply to shapes only — a 1x1 anchor has no boundary worth
+  // clipping to, and shortening here would make free lines miss the cursor.
+  expect(start.x).toBeCloseTo(400, -1)
+  expect(start.y).toBeCloseTo(300, -1)
+  expect(end.x).toBeCloseTo(800, -1)
+  expect(end.y).toBeCloseTo(500, -1)
+})
