@@ -1,0 +1,36 @@
+{
+  "name": "simple-reactflow-whiteboard",
+  "private": false,
+  "version": "0.1.0",
+  "description": "A minimal Excalidraw-style freeform whiteboard built on React Flow. MIT, no tldraw.",
+  "license": "MIT",
+  "author": "Zach Yamaoka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zacharyyamaoka/simple-reactflow-whiteboard.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5199 --strictPort",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview --port 5199 --strictPort",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
