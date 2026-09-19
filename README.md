@@ -35,6 +35,11 @@ directly instead — see the `WHY:` comment on `createAnchorNode` in
 ## Development
 
 ```bash
+bash scripts/dev.sh   # installs if needed, starts on http://127.0.0.1:5199,
+                      # and says so rather than erroring if it is already up
+```
+
+```bash
 pnpm install
 pnpm dev      # http://127.0.0.1:5199
 pnpm build    # tsc -b && vite build
