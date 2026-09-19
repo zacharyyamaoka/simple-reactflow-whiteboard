@@ -284,3 +284,146 @@ test('a free connector still reaches its exact drawn endpoints', async ({ page }
   expect(end.x).toBeCloseTo(800, -1)
   expect(end.y).toBeCloseTo(500, -1)
 })
+
+/**
+ * Third wave — defects found by an independent audit of the shipped code.
+ * Committed on their own, red, before the fix that makes them pass.
+ * Every expected value below is derived from the geometry of the gesture,
+ * never read back from what the implementation happened to produce.
+ */
+
+const span = (a: Vec, b: Vec) => Math.hypot(b.x - a.x, b.y - a.y)
+
+async function viewportScale(page: Page): Promise<number> {
+  const transform = await page.evaluate(
+    () => (document.querySelector('.react-flow__viewport') as HTMLElement | null)?.style.transform ?? '',
+  )
+  return Number(transform.match(/scale\(([\d.]+)\)/)?.[1] ?? '1')
+}
+
+test('a connector between nested shapes still spans a visible distance', async ({ page }) => {
+  // B sits wholly inside A, but their centres differ.
+  await page.keyboard.press('r')
+  await drag(page, { x: 200, y: 150 }, { x: 700, y: 550 }) // A, centre (450,350)
+  await page.keyboard.press('r')
+  await drag(page, { x: 300, y: 200 }, { x: 400, y: 280 }) // B, centre (350,240)
+
+  await page.keyboard.press('a')
+  await drag(page, { x: 620, y: 500 }, { x: 350, y: 240 })
+
+  const m = await model(page)
+  expect(m.edges).toHaveLength(1)
+  const { start, end } = await edgeEndpoints(page, m.edges[0].id)
+  // Binding an end to A is meaningless when the *other* end is also inside A:
+  // the ray never leaves the box, so there is no border to clip to and the
+  // endpoint would collapse. That end must stay where it was drawn instead.
+  expect(start.x).toBeCloseTo(620, -1)
+  expect(start.y).toBeCloseTo(500, -1)
+  expect(span(start, end)).toBeGreaterThan(150)
+})
+
+test('shapes sharing a centre fall back to free endpoints instead of collapsing', async ({
+  page,
+}) => {
+  await page.keyboard.press('r')
+  await drag(page, { x: 200, y: 150 }, { x: 700, y: 550 }) // centre (450,350)
+  await page.keyboard.press('r')
+  await drag(page, { x: 380, y: 300 }, { x: 520, y: 400 }) // centre (450,350) too
+
+  await page.keyboard.press('a')
+  await drag(page, { x: 250, y: 200 }, { x: 650, y: 500 })
+
+  const m = await model(page)
+  expect(m.edges).toHaveLength(1)
+  const { start, end } = await edgeEndpoints(page, m.edges[0].id)
+  // Binding both ends would put both endpoints on the shared centre and draw
+  // nothing at all. The drawn gesture must survive instead.
+  expect(span(start, end)).toBeGreaterThan(50)
+})
+
+test('an arrow drawn wholly inside one shape stays visible and selectable', async ({ page }) => {
+  await page.keyboard.press('r')
+  await drag(page, { x: 300, y: 200 }, { x: 600, y: 450 })
+  await page.keyboard.press('a')
+  await drag(page, { x: 350, y: 250 }, { x: 550, y: 400 })
+
+  const m = await model(page)
+  expect(m.edges).toHaveLength(1)
+  // A connector from a node to itself has no geometry; it must not be created.
+  expect(m.edges[0].source).not.toBe(m.edges[0].target)
+
+  const { start, end } = await edgeEndpoints(page, m.edges[0].id)
+  expect(span(start, end)).toBeGreaterThan(100)
+
+  // And it must be clickable: a zero-length hit path selects the rect instead.
+  const o = await paneOrigin(page)
+  await page.mouse.click(o.x + 450, o.y + 325)
+  await page.waitForTimeout(80)
+  const selectedEdges = await page.evaluate(
+    () => (window as unknown as { __WB__: WbDebug }).__WB__.edges.filter((e) => (e as { selected?: boolean }).selected).length,
+  )
+  expect(selectedEdges).toBe(1)
+})
+
+test('the zoom controls still work while a draw tool is armed', async ({ page }) => {
+  const before = await viewportScale(page)
+  await page.keyboard.press('r')
+
+  await page.locator('.react-flow__controls-zoomin').click()
+  await page.waitForTimeout(250)
+
+  expect(await viewportScale(page)).toBeGreaterThan(before)
+  // And the click on the chrome must not have drawn anything.
+  expect((await model(page)).nodes).toHaveLength(0)
+})
+
+test('Escape mid-drag abandons the shape instead of committing it', async ({ page }) => {
+  await page.keyboard.press('r')
+  const o = await paneOrigin(page)
+  await page.mouse.move(o.x + 300, o.y + 200)
+  await page.mouse.down()
+  for (let i = 1; i <= 4; i += 1) await page.mouse.move(o.x + 300 + i * 25, o.y + 200 + i * 20)
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(80)
+  await page.mouse.up()
+  await page.waitForTimeout(80)
+
+  expect((await model(page)).nodes).toHaveLength(0)
+  await expect(page.locator('[data-testid="draw-preview"]')).toHaveCount(0)
+})
+
+test('a free endpoint can be grabbed by a human-sized target', async ({ page }) => {
+  await page.keyboard.press('a')
+  await drag(page, { x: 400, y: 300 }, { x: 800, y: 300 })
+
+  const target = anchors(await model(page)).find((a) => Math.abs(a.position.x - 800) < 6)
+  expect(target).toBeTruthy()
+
+  // 4px off the exact endpoint — well within what a hand can do, and today
+  // the anchor is 1x1 so only a pixel-perfect grab lands.
+  await drag(page, { x: 804, y: 304 }, { x: 804, y: 404 })
+
+  const moved = anchors(await model(page)).find((a) => a.id === target!.id)!
+  expect(moved.position.y).toBeCloseTo(target!.position.y + 100, -1)
+})
+
+test('the click-vs-drag threshold is measured in screen pixels, not flow units', async ({
+  page,
+}) => {
+  await page.locator('.react-flow__controls-zoomout').click()
+  await page.waitForTimeout(250)
+  const scale = await viewportScale(page)
+  expect(scale).toBeLessThan(1)
+
+  await page.keyboard.press('r')
+  await drag(page, { x: 400, y: 300 }, { x: 403, y: 302 })
+
+  const drawn = shapes(await model(page))
+  expect(drawn).toHaveLength(1)
+  // A 3px twitch is a click at any zoom. Comparing the threshold against flow
+  // units instead makes it 3/scale units, so zoomed out it reads as a drag and
+  // commits a shape a few units across that the user never meant to make.
+  expect(drawn[0].width).toBeCloseTo(160, -1)
+  expect(drawn[0].height).toBeCloseTo(100, -1)
+})
